@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronUp, X, ArrowRight } from 'lucide-react';
+import { ChevronDown, ChevronUp, X, ArrowRight, Menu } from 'lucide-react';
 import { VietnamMap, Mandala, VietnamFlag, DocumentIcon, HammerSickle, BookIcon } from './SVGElements';
 
 // Modal content for the 3 buttons on slide 3 (Dân chủ là gì theo quan điểm khoa học?)
@@ -138,6 +138,8 @@ const Magazine = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [scrollLocked, setScrollLocked] = useState(false);
   const [activeModal, setActiveModal] = useState(null); // { type: 'slide11' | 'lastSlide', index: number }
+  const [menuOpen, setMenuOpen] = useState(false);
+  const touchStartY = useRef(null);
 
   // Helper to get modal content based on type
   const getModalContent = () => {
@@ -325,19 +327,60 @@ Con đường phát triển dân chủ của Việt Nam là một phần không 
     },
   ];
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (currentPage < pages.length - 1 && !scrollLocked) {
       setScrollLocked(true);
       setCurrentPage(currentPage + 1);
       setTimeout(() => setScrollLocked(false), 600);
     }
-  };
+  }, [currentPage, scrollLocked, pages.length]);
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (currentPage > 0 && !scrollLocked) {
       setScrollLocked(true);
       setCurrentPage(currentPage - 1);
       setTimeout(() => setScrollLocked(false), 600);
+    }
+  }, [currentPage, scrollLocked]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setActiveModal(null);
+        setMenuOpen(false);
+        return;
+      }
+
+      if (activeModal !== null || menuOpen) return;
+
+      if (event.key === 'ArrowDown' || event.key === 'ArrowRight' || event.key === 'PageDown') {
+        event.preventDefault();
+        handleNext();
+      }
+
+      if (event.key === 'ArrowUp' || event.key === 'ArrowLeft' || event.key === 'PageUp') {
+        event.preventDefault();
+        handlePrev();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeModal, menuOpen, handleNext, handlePrev]);
+
+  const handleTouchStart = (event) => {
+    touchStartY.current = event.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (event) => {
+    if (touchStartY.current === null || activeModal !== null || menuOpen) return;
+
+    const distance = touchStartY.current - event.changedTouches[0].clientY;
+    touchStartY.current = null;
+
+    if (Math.abs(distance) > 50) {
+      if (distance > 0) handleNext();
+      else handlePrev();
     }
   };
 
@@ -374,7 +417,7 @@ Con đường phát triển dân chủ của Việt Nam là một phần không 
       
       // Nếu đang cuộn xuống và có thể scroll xuống, cho phép scroll
       if (e.deltaY > 0 && canScrollDown) {
-        return; // Cho phép scroll bình thường
+        return;
       }
       
       // Nếu đang cuộn lên và có thể scroll lên, cho phép scroll
@@ -384,13 +427,11 @@ Con đường phát triển dân chủ của Việt Nam là một phần không 
       
       // Nếu đã scroll đến đầu/cuối, mới chuyển trang
       if (e.deltaY > 50 && !canScrollDown) {
-        e.preventDefault();
         handleNext();
         return;
       }
       
       if (e.deltaY < -50 && !canScrollUp) {
-        e.preventDefault();
         handlePrev();
         return;
       }
@@ -400,7 +441,6 @@ Con đường phát triển dân chủ của Việt Nam là một phần không 
     }
     
     // Nếu không có element scrollable, chuyển trang như bình thường
-    e.preventDefault();
     if (e.deltaY > 50) handleNext();
     else if (e.deltaY < -50) handlePrev();
   };
@@ -431,6 +471,8 @@ Con đường phát triển dân chủ của Việt Nam là một phần không 
     <div 
       className="relative w-full h-screen overflow-hidden bg-black" 
       onWheel={handleWheel}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
       style={{ touchAction: 'pan-y' }}
     >
       <AnimatePresence initial={false} custom={currentPage} mode="wait">
@@ -1297,6 +1339,8 @@ Con đường phát triển dân chủ của Việt Nam là một phần không 
           whileTap={{ scale: 0.95 }}
           onClick={handlePrev}
           disabled={currentPage === 0}
+          aria-label="Trang trước"
+          title="Trang trước"
           className={`pointer-events-auto ml-2 sm:ml-3 md:ml-4 p-2 sm:p-2.5 md:p-3 rounded-full transition-all ${
             currentPage === 0
               ? 'bg-gray-600 opacity-50 cursor-not-allowed'
@@ -1311,6 +1355,8 @@ Con đường phát triển dân chủ của Việt Nam là một phần không 
           whileTap={{ scale: 0.95 }}
           onClick={handleNext}
           disabled={currentPage === pages.length - 1}
+          aria-label="Trang tiếp theo"
+          title="Trang tiếp theo"
           className={`pointer-events-auto mr-2 sm:mr-3 md:mr-4 p-2 sm:p-2.5 md:p-3 rounded-full transition-all ${
             currentPage === pages.length - 1
               ? 'bg-gray-600 opacity-50 cursor-not-allowed'
@@ -1319,6 +1365,23 @@ Con đường phát triển dân chủ của Việt Nam là một phần không 
         >
           <ChevronDown size={18} className="sm:w-5 sm:h-5 md:w-6 md:h-6 text-black" />
         </motion.button>
+      </div>
+
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setMenuOpen(true)}
+        aria-label="Mở mục lục"
+        title="Mở mục lục"
+        className="absolute top-4 right-4 z-30 flex items-center gap-2 rounded-full bg-black/50 px-3 py-2 text-xs font-semibold text-white backdrop-blur-sm transition-colors hover:bg-black/70 sm:top-6 sm:right-6"
+      >
+        <Menu size={18} />
+        <span className="hidden sm:inline">Mục lục</span>
+      </motion.button>
+
+      <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 text-center text-[11px] text-white/80 sm:bottom-6 sm:text-xs">
+        <span className="hidden sm:inline">Cuộn, vuốt hoặc dùng phím mũi tên để xem tiếp</span>
+        <span className="sm:hidden">Vuốt để xem tiếp</span>
       </div>
 
       {currentPage < pages.length - 1 && (
@@ -1330,6 +1393,66 @@ Con đường phát triển dân chủ của Việt Nam là một phần không 
           <ChevronDown size={20} className="sm:w-6 sm:h-6 md:w-8 md:h-8" />
         </motion.div>
       )}
+
+      <AnimatePresence>
+        {menuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            onClick={() => setMenuOpen(false)}
+          >
+            <motion.aside
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+              onClick={(event) => event.stopPropagation()}
+              className="ml-auto flex h-full w-[min(88vw,22rem)] flex-col bg-red-950 p-5 text-white shadow-2xl sm:p-7"
+              aria-label="Mục lục nội dung"
+            >
+              <div className="mb-5 flex items-center justify-between border-b border-red-700 pb-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-yellow-300">Nội dung</p>
+                  <h2 className="mt-1 text-xl font-bold">Dân chủ và Việt Nam</h2>
+                </div>
+                <button
+                  onClick={() => setMenuOpen(false)}
+                  aria-label="Đóng mục lục"
+                  title="Đóng mục lục"
+                  className="rounded-full p-2 text-white transition-colors hover:bg-red-800"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <nav className="flex-1 overflow-y-auto pr-1" aria-label="Các trang trình chiếu">
+                <ol className="space-y-1">
+                  {pages.map((page, index) => (
+                    <li key={`${page.id}-${index}`}>
+                      <button
+                        onClick={() => {
+                          setCurrentPage(index);
+                          setMenuOpen(false);
+                        }}
+                        className={`flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
+                          currentPage === index
+                            ? 'bg-yellow-400 font-semibold text-red-950'
+                            : 'text-red-100 hover:bg-red-800'
+                        }`}
+                      >
+                        <span className="w-6 flex-shrink-0 text-right text-xs opacity-70">{index + 1}</span>
+                        <span>{page.title}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              </nav>
+            </motion.aside>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Modal for displaying detailed content */}
       <AnimatePresence>
